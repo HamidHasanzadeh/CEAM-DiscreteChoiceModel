@@ -18,11 +18,14 @@ from .model import CEAM
 class TrainingConfig:
     seed: int = 42
     hidden_units: int = 6
+    hidden_layers: tuple[int, ...] | None = None
+    activation: str = "relu"
     learning_rate: float = 2e-4
     epochs: int = 50
     batch_size: int = 16
     correction_penalty: float = 1e-8
     penalty_form: str = "squared"
+    penalty_reduction: str = "mean"
 
 
 def set_seed(seed: int) -> None:
@@ -31,19 +34,43 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def fit_model(train: Split, validation: Split, config: TrainingConfig) -> tuple[CEAM, dict]:
-    """Optimize validation-selected CEAM parameters.
+def correction_penalty_value(correction: Tensor, *, penalty_form: str = "squared",
+                             reduction: str = "mean") -> Tensor:
+    """Aggregate per-observation correction magnitudes.
 
-    By default, apply lambda times the BATCH-SUMMED squared L2 norm of the
-    neural correction; the cross-entropy term is batch-averaged. Thus the
-    effective relative penalty changes with batch size. This is the
-    objective implemented by the reference training routine.
-    An optional unsquared-norm penalty is also supported.
+    For the default squared form, mean reduction computes the average
+    squared L2 correction across observations. The sum option reproduces
+    the original public implementation's batch-summed squared penalty.
+    """
+    if correction.ndim != 2 or correction.shape[0] == 0:
+        raise ValueError("Expected nonempty [batch, alternatives] corrections")
+    if penalty_form not in {"norm", "squared"}:
+        raise ValueError("penalty_form must be 'norm' or 'squared'")
+    if reduction not in {"mean", "sum"}:
+        raise ValueError("reduction must be 'mean' or 'sum'")
+    if penalty_form == "squared":
+        per_observation = correction.square().sum(dim=1)
+        return per_observation.mean() if reduction == "mean" else per_observation.sum()
+    if reduction == "sum":
+        return torch.linalg.vector_norm(correction)  # legacy global L2 norm
+    return torch.linalg.vector_norm(correction, dim=1).mean()
+
+
+def fit_model(train: Split, validation: Split, config: TrainingConfig) -> tuple[CEAM, dict]:
+    """Train CEAM using validation log-loss for checkpoint selection.
+
+    The default squared penalty is averaged across the minibatch, matching
+    the normalized convention used in the later SwissMetro sensitivity
+    scripts. Set penalty_reduction='sum' to reproduce the earlier public
+    implementation's batch-summed convention.
     """
     if config.penalty_form not in {"norm", "squared"}:
         raise ValueError("penalty_form must be 'norm' or 'squared'")
+    if config.penalty_reduction not in {"mean", "sum"}:
+        raise ValueError("penalty_reduction must be 'mean' or 'sum'")
     set_seed(config.seed)
-    model = CEAM(config.hidden_units)
+    model = CEAM(config.hidden_units, hidden_layers=config.hidden_layers,
+                 activation=config.activation)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=0)
     loader = DataLoader(TensorDataset(train.features, train.labels, train.availability),
                         batch_size=config.batch_size, shuffle=True)
@@ -56,8 +83,10 @@ def fit_model(train: Split, validation: Split, config: TrainingConfig) -> tuple[
         for features, target, availability in loader:
             optimizer.zero_grad(set_to_none=True)
             c = model.components(features)
-            residual = torch.linalg.vector_norm(c.neural_correction)
-            penalty = residual if config.penalty_form == "norm" else residual.square()
+            penalty = correction_penalty_value(
+                c.neural_correction, penalty_form=config.penalty_form,
+                reduction=config.penalty_reduction,
+            )
             logits = model.mask_logits(c.logits, availability)
             loss = F.cross_entropy(logits, target) + config.correction_penalty * penalty
             loss.backward()

@@ -7,6 +7,7 @@ Features must use the same numerical scaling in training and evaluation.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Sequence
 
 import torch
 from torch import Tensor, nn
@@ -46,19 +47,42 @@ class UtilityLayer(nn.Module):
 
 
 class CEAM(nn.Module):
-    """Linear utility augmented by a network of all attributes and utilities.
+    """SwissMetro utilities plus configurable cross-alternative neural correction.
 
-    The neural path receives the concatenation [X, V] and has exactly one
-    fully connected hidden layer with ReLU, followed by a linear output
-    projection. The three correction outputs are added to linear utilities. 
+    The neural branch receives [X, V] (six attributes and three utilities).
+    By default it retains the original one-hidden-layer ReLU architecture.
+    Custom hidden_layers and activation affect only the neural branch.
     """
 
-    def __init__(self, hidden_units: int = 6) -> None:
+    def __init__(
+        self,
+        hidden_units: int = 6,
+        *,
+        hidden_layers: Sequence[int] | None = None,
+        activation: str = "relu",
+    ) -> None:
         super().__init__()
-        if hidden_units <= 0:
-            raise ValueError("hidden_units must be positive")
+        if hidden_layers is None:
+            layers_width = (hidden_units,)
+        else:
+            if isinstance(hidden_layers, (str, bytes)):
+                raise ValueError("hidden_layers must be a sequence of positive integers")
+            layers_width = tuple(hidden_layers)
+        if not layers_width or any(type(width) is not int or width <= 0 for width in layers_width):
+            raise ValueError("hidden layer widths must be positive integers")
+        activation_types = {"relu": nn.ReLU, "tanh": nn.Tanh, "gelu": nn.GELU}
+        if activation not in activation_types:
+            raise ValueError("activation must be one of: relu, tanh, gelu")
+        self.hidden_layers = layers_width
+        self.activation = activation
         self.utility_layer = UtilityLayer()
-        self.cross_effect = nn.Sequential(nn.Linear(9, hidden_units), nn.ReLU(), nn.Linear(hidden_units, 3))
+        layers: list[nn.Module] = []
+        previous_width = 9
+        for width in layers_width:
+            layers.extend((nn.Linear(previous_width, width), activation_types[activation]()))
+            previous_width = width
+        layers.append(nn.Linear(previous_width, 3))
+        self.cross_effect = nn.Sequential(*layers)
 
     def components(self, features: Tensor) -> Components:
         linear = self.utility_layer(features)
