@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+
+# Credentials and personal/local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Do not accidentally publish raw respondent data or intermediate model artifacts
+data/raw/
+data/processed/
+*.pkl
+*.pickle
+*.pt
+*.pth
+*.ckpt
+*.joblib
+
+# Local large results
+results/generated/
+logs/
+.DS_Store
+Thumbs.db

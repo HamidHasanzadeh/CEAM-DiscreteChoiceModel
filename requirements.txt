@@ -1,0 +1,10 @@
+# Minimal runtime for the clean SwissMetro implementation.
+# Install tested-compatible versions via your project environment manager.
+torch>=2.2,<3
+numpy>=1.26,<3
+pandas>=2.0,<4
+openpyxl>=3.1,<4
+scipy>=1.11,<2
+pytest>=8,<10
+
+cma>=3.3,<5
