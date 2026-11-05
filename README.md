@@ -31,9 +31,9 @@ python -m pytest
 
 The input must contain the six **pre-scaled** fields `TRAIN_TT_SCALED`, `TRAIN_COST_SCALED`, `SM_TT_SCALED`, `SM_COST_SCALED`, `CAR_TT_SCALED`, `CAR_CO_SCALED`; availability flags `TRAIN_AV`, `SM_AV`, `CAR_AV`; and `PURPOSE`, `CHOICE`, `ID`. The examples default to respondent-disjoint train/validation/test splits.
 
-## Scope
+## Repository Overview
 
-This public repository contains the **core model**, training and optimization utilities, an independent MNL baseline, basic response diagnostics, automated tests, and illustrative SwissMetro command-line examples. It focuses on the reusable modeling framework and runnable examples. Study-specific datasets, preprocessing pipelines, experiment configurations, and supplementary analysis workflows are outside the scope of this release. 
+This repository provides a streamlined implementation of CEAM, including the model architecture, training and hyperparameter optimization, an independent MNL baseline, diagnostic utilities, and automated tests. The SwissMetro examples demonstrate how to train and evaluate the models using appropriately prepared input data.
 
 ## Citation
 
