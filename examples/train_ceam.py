@@ -21,17 +21,28 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("results/generated/swissmetro"))
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--hidden-units", type=int, default=6)
+    parser.add_argument("--hidden-layers", type=str, default=None, help="Comma-separated widths, e.g. 32,16")
+    parser.add_argument("--activation", choices=("relu", "tanh", "gelu"), default="relu")
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--lambda-correction", type=float, default=1e-8)
     parser.add_argument("--penalty-form", choices=("norm", "squared"), default="squared")
+    parser.add_argument("--penalty-reduction", choices=("mean", "sum"), default="mean")
     parser.add_argument("--respondent-column", default="ID", help="Respondent identifier (default: ID)")
     args = parser.parse_args()
+    try:
+        layers = None if args.hidden_layers is None else tuple(int(v.strip()) for v in args.hidden_layers.split(","))
+    except ValueError:
+        parser.error("--hidden-layers requires comma-separated integers")
+    if layers is not None and (not layers or any(width <= 0 for width in layers)):
+        parser.error("--hidden-layers requires positive integers")
     config = TrainingConfig(seed=args.seed, hidden_units=args.hidden_units,
+                            hidden_layers=layers, activation=args.activation,
                             epochs=args.epochs, learning_rate=args.learning_rate,
                             batch_size=args.batch_size, correction_penalty=args.lambda_correction,
-                            penalty_form=args.penalty_form)
+                            penalty_form=args.penalty_form,
+                            penalty_reduction=args.penalty_reduction)
     dataframe = load_swissmetro(args.data)
     partitions = partition(dataframe, seed=args.seed, group_column=args.respondent_column)
     model, fit = fit_model(partitions.train, partitions.validation, config)
